@@ -1,0 +1,20 @@
+# Ignore all .log files
+*.log
+
+# Ignore specific files
+config.env
+
+# Ignore .env files
+.env
+
+# Ignore all files in the build/ directory
+build/
+
+# Ignore Python compiled files
+*.pyc
+
+*.pdf
+
+docs/
+
+*.ipynb
