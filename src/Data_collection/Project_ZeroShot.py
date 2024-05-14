@@ -1,4 +1,3 @@
-from Prompt_examples import content1,content2,content3, content4
 import os
 import PyPDF2
 import openai
@@ -34,7 +33,7 @@ import PyPDF2
 import ast
 warnings.filterwarnings("ignore")
 # Configure basic logging
-logging.basicConfig(filename='app_COT_BT.log', level=logging.INFO, 
+logging.basicConfig(filename='app_Zeroshot.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 def analyze_directory(directory):
@@ -261,39 +260,90 @@ def extract_key_topic(outcome):
     else:
         return "General"
 
+import networkx as nx
+import matplotlib.pyplot as plt
+import random
+from matplotlib.lines import Line2D
+from community import community_louvain
+from itertools import cycle
 
-# Function to draw a graph based on given indices and title
-def draw_similarity_graph(indices, cosine_sim, title,threshold):
+def draw_similarity_graph(indices, cosine_sim, title, threshold):
     G = nx.Graph()
 
-    # Add nodes and edges based on the provided indices and similarity matrix
-    for i in indices:
-        G.add_node(i, label=f"Doc {i+1}")
-    for i in indices:
-        for j in indices:
-            if i != j and cosine_sim[i][j] > threshold:
+    # Ensure indices are within the bounds of cosine_sim dimensions
+    n = cosine_sim.shape[0]
+    valid_indices = [i for i in indices if i < n]
+
+    for i in valid_indices:
+        G.add_node(i, label=f"Outcome {i+1}")
+
+    for i in valid_indices:
+        for j in valid_indices:
+            if i < j and cosine_sim[i][j] > threshold:
                 G.add_edge(i, j, weight=cosine_sim[i][j])
-    
-    pos = nx.spring_layout(G)  # Node positions
 
-    plt.figure(figsize=(10, 8))
-    plt.grid(True)  # Enable grid
-    plt.axis('on')  # Show axis
+    # Detect communities
+    partition = community_louvain.best_partition(G)
+    communities = set(partition.values())
 
-    # Nodes
-    node_colors = range(len(G))
-    nx.draw_networkx_nodes(G, pos, node_size=700, cmap=plt.cm.viridis, node_color=node_colors, alpha=0.8)
+    pos = nx.spring_layout(G)
 
-    # Edges
+    plt.figure(figsize=(14, 12))
+    plt.grid(True)
+    plt.axis('on')
+
+    # Create cycle iterators for shapes and colors
+    shape_list = ['o', '^', 's', 'P', 'X', 'D', '*', 'H', '<', '>']
+    color_palette = plt.cm.tab20.colors
+    shape_cycle = cycle(shape_list)
+    color_cycle = cycle(color_palette)
+
+    community_shapes = {community: next(shape_cycle) for community in communities}
+    community_colors = {community: next(color_cycle) for community in communities}
+
+    for community_id in communities:
+        shape = community_shapes[community_id]
+        color = community_colors[community_id]
+        nx.draw_networkx_nodes(G, pos,
+                               nodelist=[node for node in partition if partition[node] == community_id],
+                               node_size=1000,
+                               node_color=[color],
+                               node_shape=shape,
+                               alpha=0.8)
+
     edges = G.edges(data=True)
-    weights = [d['weight']*10 for u, v, d in edges]
+    weights = [d['weight'] * 10 for u, v, d in edges]
     nx.draw_networkx_edges(G, pos, edgelist=edges, width=weights)
 
-    # Labels
     nx.draw_networkx_labels(G, pos, font_size=12, font_family="sans-serif")
 
+    legend_elements = [Line2D([0], [0], marker=shape, color='w', 
+                              label=f'Learning Outcome Group {i+1}',
+                              markerfacecolor=color, markersize=15) 
+                       for i, (shape, color) in enumerate(list(zip(shape_list, color_palette))[:len(communities)])]
+    plt.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1, 1), title="Learning Outcomes")
+
     plt.title(title, fontsize=20)
+    plt.subplots_adjust(right=0.7)
     plt.show()
+
+
+def get_embedding(texts, model="text-embedding-3-small"):
+    # Set your OpenAI API key here
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    try:
+        # Adjust the request for the OpenAI API format
+        response = client.embeddings.create(
+            input=texts,  # No need to replace "\n" here; assuming no newlines in short texts
+            model=model
+        )
+        # Extract embeddings correctly from the response
+        embeddings = [item.embedding for item in response.data]
+        return embeddings
+    except Exception as e:
+        print(f"Error obtaining embeddings: {e}")
+        return []
+
 
 
  # Define your desired data structure for learning outcomes.
@@ -315,40 +365,25 @@ def generate_learning_outcomes_for_chunks(documents):
 
     
     system_message = f"""
-\"\"\"
-As a curriculum developer and professor, tasked with dissecting educational material across a broad spectrum of topics, your goal is to articulate exactly {number_of_outcomes} learning outcomes. These outcomes, derived from material within triple backticks, should span the cognitive spectrum of Bloom's Taxonomy, ensuring students acquire a comprehensive set of skills and knowledge.
-
-To achieve this, follow the steps below, each step aligned with Bloom's principles:
-
-1. **Content Review**: Begin with a thorough review of the provided material. Whether it's theoretical discussions, practical applications, or programming examples, grasp the depth and breadth of each topic.
-
-2. **Bloom's Alignment**: Map the core concepts from the material to Bloom's Taxonomy levels - remembering, understanding, applying, analyzing, evaluating, and creating. This ensures a holistic approach to learning outcome development.
-
-3. **Outcome Identification**: Based on Bloom's alignment, identify key learning outcomes for each piece of content. Use action verbs specific to Bloom's levels (e.g., 'list', 'explain', 'demonstrate', 'analyze', 'evaluate', 'create') to clearly articulate the cognitive skills and knowledge to be developed.
-
-4. **Outcome Selection and Prioritization**: From the potential outcomes, prioritize and select {number_of_outcomes} that offer a balanced representation across Bloom's levels. This selection should ensure that students not only acquire foundational knowledge but are also able to apply, analyze, synthesize, and evaluate information in complex scenarios.
-
-5. **List Organization**: Organize these {number_of_outcomes} into a Python list, with each item representing a unique learning goal derived directly from the content and aligned with a specific level of Bloom's Taxonomy.
-
-*An example structure for organizing the learning outcomes in a Python list could look like this:*
-
-    learning_outcomes = [
-        "Outcome 1: Understanding the fundamental concepts of [Topic A], demonstrating both theoretical insights and practical applications.",
-        "Outcome 2: Developing proficiency in [Skill B] through guided practice and real-world applications found in [Topic B].",
-        ...
-        "Outcome {number_of_outcomes}: Achieving a comprehensive understanding and application of [Concepts from Topic X] combined with [Skills from Topic Y]."
-    ]
-
-\"\"\"
-\"\"\"Through this structured, Bloom's Taxonomy-aligned approach, you will develop diverse and comprehensive learning outcomes, ensuring students achieve both conceptual understanding and practical proficiency.\"\"\"
-"""
+      As a Professor with expertise in curriculum development and crafting learning outcomes, 
+      your task is to extract and enumerate {number_of_outcomes} distinct learning outcomes from the 
+      provided course content. This content includes programming code, with each topic or code example 
+      distinctly separated by triple backticks ```. Your challenge is to recognize and interpret these 
+      segmented topics, especially those conveyed through programming code, to determine their thematic 
+      and practical contributions to the course. These outcomes should address the comprehensive skills 
+      and knowledge base essential to the subject matter, with a special emphasis on the interpretation 
+      and application of programming concepts as demonstrated within the code segments. 
+      The learning outcomes should be formatted as a Python list, precisely containing {number_of_outcomes} 
+      entries. Each entry must represent a unique learning outcome that students are expected to achieve by 
+      the end of the course, directly informed by the theoretical content and the 
+      practical programming code examples provided.
+    """
     all_out_comes=[]
-    logging.info("Chain_Of_thought_FS_BT")
     d=dict()
     # Generate learning outcomes for each chunk
-    for index, chunk in enumerate(documents, start=1):
-        logging.info(chunk)
-        delimiter = "```"
+
+    for index, chunk in enumerate(documents):
+
         user_message = f"""
                         \"\"\"
                         As a curriculum developer and professor, I am tasked with creating learning outcomes based on the provided educational material. Below is a segment of educational content enclosed within triple backticks, which spans a wide range of topics potentially including theoretical discussions, practical applications, programming examples, and other forms of academic content. My goal is to distill this material into specific, actionable learning outcomes that reflect the essential skills and knowledge students are expected to master. 
@@ -374,7 +409,6 @@ To achieve this, follow the steps below, each step aligned with Bloom's principl
         start = summary.find("[")
         end = summary.rfind("]") + 1
         outcome_list = eval(summary[start:end])
-        logging.info(outcome_list)
         d[index]=outcome_list
         all_out_comes.append(outcome_list)
 
@@ -382,16 +416,18 @@ To achieve this, follow the steps below, each step aligned with Bloom's principl
     return
     # Flatten each list of outcomes into a single string per list to simplify the example
     documents = [item for outcome_list in all_out_comes for item in outcome_list]
+    # Get embeddings for the documents
+    document_embeddings = get_embedding(documents)
 
-    # Vectorize the documents
-    vectorizer = TfidfVectorizer(stop_words='english')
-    tfidf_matrix = vectorizer.fit_transform(documents)
+    # Before converting to a numpy array, check if we received empty embeddings
+    if document_embeddings:
+        # Convert the list of embeddings into a numpy array
+        embeddings_matrix = np.vstack(document_embeddings)
 
-    # Compute cosine similarity between documents
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-
+        # Compute cosine similarity between document embeddings
+        cosine_sim = cosine_similarity(embeddings_matrix, embeddings_matrix)
     # Determine similarity threshold
-    threshold = 0.2  # Example threshold, adjust based on your needs
+    threshold = 0.5  # Example threshold, adjust based on your needs
 
     # Filter documents based on similarity (naive approach)
     filtered_indices = []
@@ -821,9 +857,9 @@ if __name__ == "__main__":
         summarized_contents = summarize_files(file_contents)
         chunked_contents = create_chunks_from_content_greedy(summarized_contents,context_window_size)
         learning_outcomes_by_chunk = generate_learning_outcomes_for_chunks(chunked_contents)
-        print(learning_outcomes_by_chunk)
-        # learning_outcomes=find_most_relevant_learning_outcome_document(vectordb,learning_outcomes_by_chunk)
-        # Quetions = format_learning_outcomes_with_identifiers(learning_outcomes)
+        # random_5_lo = random.sample(learning_outcomes_by_chunk, 5)
+        # learning_outcomes=find_most_relevant_learning_outcome_document(vectordb,random_5_lo)
+        # Quetions = format_learning_outcomes_with_identifiers(random_5_lo)
         # mark_down = generate_markdown_file(Quetions)
         
 

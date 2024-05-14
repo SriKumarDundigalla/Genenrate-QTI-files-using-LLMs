@@ -35,7 +35,7 @@ import PyPDF2
 import ast
 warnings.filterwarnings("ignore")
 # Configure basic logging
-logging.basicConfig(filename='app_Zeroshot.log', level=logging.INFO, 
+logging.basicConfig(filename='RAG_COT_Quetions.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 def analyze_directory(directory):
@@ -46,14 +46,14 @@ def analyze_directory(directory):
     :return: A list of dictionaries, each containing 'name', 'type', 'size', and 'path' of the file.
     """
     logging.info(f"Analyzing directory: {directory}")
-    supported_extensions = {'.md', '.ipynb','.pdf'} #'.py'
+    supported_extensions = {'.md', '.ipynb', '.pdf'}
     file_details = []
 
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            file_path = os.path.join(root, file)
+    # List files directly in the given directory
+    for file in os.listdir(directory):
+        file_path = os.path.join(directory, file)
+        if os.path.isfile(file_path):  # Ensure it is a file, not a directory
             extension = os.path.splitext(file_path)[1]
-
             if extension in supported_extensions:
                 file_info = {
                     'name': file,
@@ -152,9 +152,7 @@ def process_and_insert_contents(file_contents, persist_directory):
         # Split the content
         documents  = text_splitter.create_documents([content_detail['content']])
         for document in documents:
-            page_content = document.page_content
-            print(page_content)
-            return  # Accessing the page_content attribute
+            page_content = document.page_content  # Accessing the page_content attribute
             all_page_contents.append(page_content)
         # Here, you would generate embeddings and insert them into your database
         # This is a placeholder to illustrate the process
@@ -346,7 +344,7 @@ def generate_learning_outcomes_for_chunks(documents):
     # Load a pre-trained model
     return documents
 
-def find_most_relevant_learning_outcome_document(vectordb, learning_outcomes):
+def find_most_relevant_learning_outcome_document(vectordb, learning_outcomes,number_of_docs=5):
     """
     Uses vectordb to find the most relevant learning outcome document from the database for each topic.
 
@@ -355,85 +353,57 @@ def find_most_relevant_learning_outcome_document(vectordb, learning_outcomes):
     :return: A list of tuples, each containing the most relevant document's content and its relevance score for each list of learning outcomes.
     """
     # Initialize the vectordb retriever with 'k' set to 1 to retrieve the most relevant document
-    retriever = vectordb.as_retriever(search_type="mmr", search_kwargs={"k": 1})
+    retriever = vectordb.as_retriever(search_type="mmr", search_kwargs={"k": number_of_docs})
 
-    documents=[]
-    for LOS in learning_outcomes:
-        outcome_page_mapping={}
-        for i in LOS:
-            docs = retriever.get_relevant_documents(i)
-            outcome_page_mapping[i]=docs[0].page_content
-        documents.append(outcome_page_mapping)
+    documents =[]
+    docs = retriever.get_relevant_documents(learning_outcomes)
+    for i in range(0,len(docs)):
+        documents.append("```"+docs[i].page_content+"```")
     return documents
 
-def format_learning_outcomes_with_identifiers(learning_outcomes):
-    formatted_strings = []
-    outcome_counter = 1  # Initialize counters for learning outcomes
+def format_learning_outcomes_with_identifiers(vectordb,learning_outcomes,number_of_docs=5):
     api_key = os.getenv('OPENAI_API_KEY')
     client = openai.OpenAI(api_key=api_key)
-    for outcome in learning_outcomes:
-        formatted_string=""
-        for key, value in outcome.items():
-            # Format string with counters
-            formatted_string = f"learning_outcome_{outcome_counter}: {key}\nrelated_content_{outcome_counter}: {value}\n"
-            outcome_counter += 1  # Increment the learning outcome counter
-        formatted_strings.append(formatted_string)
-    system_message=f"""
-                    You are a professor tasked with developing a concise series of multiple-choice quiz questions for your students, each aligned with a distinct learning outcome and directly related to specific content. Your objective is to ensure that each question not only integrates with the learning material but also that its correct answer is unequivocally found within the provided content. To accomplish this, follow the enhanced approach detailed below, which includes steps for identifying a similar main heading to unify the theme of your quiz.
-                    **Enhanced Steps to Follow:**
+    Quetion_Learning_outcomes=dict()
+    for i in learning_outcomes:
+        docs = find_most_relevant_learning_outcome_document(vectordb,i,number_of_docs)
+        system_message=f"""
+**Task:** You are a professor tasked with developing a concise series of multiple-choice quiz questions for your students. Each question must be aligned with a distinct learning outcome and directly related to specific content sections provided by the user. This content may include programming code relevant to the learning outcomes. The correct answer to each question should be unequivocally found within the provided content, which is enclosed in triple backticks for each section. Generate five multiple-choice questions from each section of content, ensuring each question can be answered based on the given content and relates closely to the learning outcomes.
 
-                    1. **Synthesize the Core Theme:**
-                    - Identify and define a central theme that encapsulates all six learning outcomes and their associated content. This theme will be the focal point of your quiz, guiding the formulation of questions and answers.
+**Follow these tasks to generate multiple-choice questions:**
+1. **Analyze the Learning Outcome and Content:** For each provided learning outcome, identify the core concept that needs to be assessed. Review the content and programming code enclosed within triple backticks to understand how it supports the learning outcome.
+2. **Content and Code Review:** Thoroughly examine the textual content and programming code. Extract key facts, figures, themes, and functional aspects of the code related to the learning outcome.
+3. **Question Development:** Based on the comprehensive review, craft questions that test the student's understanding of specific facts, themes, or the functionality demonstrated by the code.
+4. **Formulating Options:** Create multiple-choice options where one is the correct answer (directly taken from the content or inferred from understanding the code) and the others are plausible but incorrect, closely related to the content to ensure a comprehensive understanding.
+5. **Avoid Repetition:** Ensure that each question is unique and there is no repetition across the sections.
+6. **Verification:** Confirm that the output quiz meets the guidelines and each question links clearly back to the provided content and its associated learning outcome.
 
-                    2. **Broaden the Theme with a Supplementary Heading:**
-                    - Expand the quiz's scope by incorporating a supplementary theme that complements the core theme. This additional perspective should still connect directly to the six learning outcomes, enriching the quiz's thematic depth.
+**Output Requirements:**
+Each question should follow this format and reflect both core and supplementary themes:
 
-                    3. **Analyze Learning Outcomes and Related Content:**
-                    - Thoroughly review each of the six learning outcomes and their corresponding content. Aim to extract key insights and knowledge that are essential to the core and supplementary themes, ensuring a comprehensive understanding that will be reflected in the quiz questions.
+[
+    "**Q. [Question here]?**\nA) [Option A]\nB) [Option B]\nC) [Option C]\nD) [Option D]\n**Answer: [Correct Option]**",
+    ... (Repeat for all questions)
+]
 
-                    4. **Craft Themed Multiple-Choice Questions:**
-                    - Create six multiple-choice questions, one for each learning outcome, that highlight critical aspects of the related content. Each question should align with both the core and supplementary themes, maintaining thematic consistency throughout the quiz.
+Proceed with this format for all questions, ensuring each is answerable based on the provided content, including understanding of the programming code. This comprehensive approach guarantees a focused, educational, and thematic quiz that effectively assesses students' understanding and engagement with the material.
+"""
 
-                    5. **Select Correct Answers and Design Distractors:**
-                    - Choose the correct answer for each question based on the related content. Then, develop three distractors for each question. These distractors should be relevant and plausible but incorrect, according to the content, ensuring the quiz accurately assesses the learner's understanding of the themes.
-
-                    6. **Ensure Verification of Output:**
-                    - Verify that the output (the quiz) includes six multiple-choice questions that adhere to the guidelines above. Each question should be clearly linked to one of the learning outcomes and accurately reflect both the core and supplementary themes.
-
-                    This structured approach ensures each quiz question is directly tied to a learning outcome and related content, with a clear thematic link and verified structure for assessing learners' understanding.
-                     
-                    **Implementation Directive:**
-                        If you are working with 6 learning outcomes and their related content, this process will result in 6 multiple-choice questions. Each question is tailored to its corresponding learning outcome, maintaining a strict one-to-one ratio between learning outcomes and questions, thereby ensuring a focused and effective evaluation of student understanding within the context of the similar main heading.
-
-                    **Example Output Format:**
-
-                        "Artificial Intelligence Essentials": "**1. What is Artificial Intelligence (AI)?**\nA) The simulation of human intelligence in machines\nB) A new internet technology\nC) A database management system\nD) A type of computer hardware\n**Answer: A) The simulation of human intelligence in machines**\n\n**2. Which of the following is a primary application of AI?**\nA) Data storage\nB) Speech recognition\nC) Website hosting\nD) Network cabling\n**Answer: B) Speech recognition**\n\n**3. What is a Neural Network?**\nA) A social media platform\nB) A computer system modeled on the human brain\nC) A new programming language\nD) A cybersecurity protocol\n**Answer: B) A computer system modeled on the human brain**\n\n**4. What does 'Natural Language Processing' (NLP) enable computers to do?**\nA) Increase processing power\nB) Understand and interpret human language\nC) Cool down servers\nD) Connect to the internet\n**Answer: B) Understand and interpret human language**\n\n**5. What is 'machine vision'?**\nA) A new type of display technology\nB) The ability of computers to 'see' and process visual data\nC) A marketing term for high-resolution screens\nD) A feature in video games\n**Answer: B) The ability of computers to 'see' and process visual data** "\n\n**6. How does AI impact the field of Robotics?**\nA) By reducing the cost of computer hardware\nB) By enabling robots to learn from their environment and improve their tasks\nC) By increasing the weight of robots\nD) By decreasing the need for internet connectivity\n**Answer: B) By enabling robots to learn from their environment and improve their tasks**"
-
-                        "Data Science Introduction": "**1. What is the primary purpose of data analysis?**\nA) To store large amounts of data\nB) To transform data into meaningful insights\nC) To create visually appealing data presentations\nD) To increase data storage capacity\n**Answer: B) To transform data into meaningful insights**\n\n**2. Which programming language is most commonly used in data science?**\nA) Java\nB) Python\nC) C++\nD) JavaScript\n**Answer: B) Python**\n\n**3. What is a DataFrame in the context of data science?**\nA) A method to secure data\nB) A 3D representation of data\nC) A data structure for storing data in tables\nD) A type of database\n**Answer: C) A data structure for storing data in tables**\n\n**4. What does 'machine learning' refer to?**\nA) The process of programming machines to perform tasks\nB) The ability of a machine to improve its performance based on previous results\nC) The science of making machines that require energy\nD) The study of computer algorithms that improve automatically through experience\n**Answer: D) The study of computer algorithms that improve automatically through experience**\n\n**5. What is 'big data'?**\nA) Data that is too large to be processed by traditional databases\nB) A large amount of small datasets\nC) Data about big things\nD) A type of data visualization\n**Answer: A) Data that is too large to be processed by traditional databases**"\n\n**6. What role does data visualization play in data science?**\nA) To make databases run faster\nB) To improve data storage efficiency\nC) To represent data in graphical format for easier interpretation\nD) To encrypt data for security\n**Answer: C) To represent data in graphical format for easier interpretation**"
-  
-                        "Web Development Fundamentals": "**1. Which language is primarily used for structuring web pages?**\nA) CSS\nB) JavaScript\nC) HTML\nD) Python\n**Answer: C) HTML**\n\n**2. What does CSS stand for?**\nA) Cascading Style Scripts\nB) Cascading Style Sheets\nC) Computer Style Sheets\nD) Creative Style Sheets\n**Answer: B) Cascading Style Sheets**\n\n**3. What is the purpose of JavaScript in web development?**\nA) To add interactivity to web pages\nB) To structure web pages\nC) To style web pages\nD) To send data to a server\n**Answer: A) To add interactivity to web pages**\n\n**4. Which HTML element is used to link a CSS stylesheet?**\nA) <script>\nB) <link>\nC) <css>\nD) <style>\n**Answer: B) <link>**\n\n**5. What does AJAX stand for?**\nA) Asynchronous JavaScript and XML\nB) Automatic JavaScript and XML\nC) Asynchronous Java and XML\nD) Automatic Java and XML\n**Answer: A) Asynchronous JavaScript and XML**"\n\n**6. What is responsive web design?**\nA) Designing websites to respond to user behavior and environment based on screen size, platform, and orientation\nB) A design technique to make web pages load faster\nC) Creating web pages that respond to voice commands\nD) Developing websites that automatically update content\n**Answer: A) Designing websites to respond to user behavior and environment based on screen size, platform, and orientation**"\n\n**6. What is the difference between a virus and a worm?**\nA) A virus requires human action to spread, whereas a worm can propagate itself\nB) A worm is a type of antivirus software\nC) A virus can only affect data, not hardware\nD) Worms are beneficial software that improve system performance\n**Answer: A) A virus requires human action to spread, whereas a worm can propagate itself**"
-
-                        "Cybersecurity Basics": "**1. What is the primary goal of cybersecurity?**\nA) To create new software\nB) To protect systems and networks from digital attacks\nC) To improve computer speed\nD) To promote open-source software\n**Answer: B) To protect systems and networks from digital attacks**\n\n**2. What is phishing?**\nA) A technique to fish information from the internet\nB) A cyberattack that uses disguised email as a weapon\nC) A firewall technology\nD) A data analysis method\n**Answer: B) A cyberattack that uses disguised email as a weapon**\n\n**3. What does 'encryption' refer to in the context of cybersecurity?**\nA) Converting data into a coded format to prevent unauthorized access\nB) Deleting data permanently\nC) Copying data to a secure location\nD) Monitoring data access\n**Answer: A) Converting data into a coded format to prevent unauthorized access**\n\n**4. What is a VPN used for?**\nA) Increasing internet speed\nB) Protecting online privacy and securing internet connections\nC) Creating websites\nD) Developing software\n**Answer: B) Protecting online privacy and securing internet connections**\n\n**5. What is malware?**\nA) Software used to perform malicious actions\nB) A new programming language\nC) A data analysis tool\nD) A type of computer hardware\n**Answer: A) Software used to perform malicious actions**"\n\n**6. What is the difference between a virus and a worm?**\nA) A virus requires human action to spread, whereas a worm can propagate itself\nB) A worm is a type of antivirus software\nC) A virus can only affect data, not hardware\nD) Worms are beneficial software that improve system performance\n**Answer: A) A virus requires human action to spread, whereas a worm can propagate itself**"
-
-                        "Cloud Computing Fundamentals": "**1. What is cloud computing?**\nA) Storing and accessing data over the internet\nB) Predicting weather patterns\nC) Computing at high altitudes\nD) A new web development framework\n**Answer: A) Storing and accessing data over the internet**\n\n**2. Which of the following is a benefit of cloud computing?**\nA) Reduced IT costs\nB) Increased data loss\nC) Slower internet speeds\nD) More hardware requirements\n**Answer: A) Reduced IT costs**\n\n**3. What is SaaS?**\nA) Software as a Service\nB) Storage as a System\nC) Security as a Software\nD) Servers as a Service\n**Answer: A) Software as a Service**\n\n**4. What does 'scalability' mean in the context of cloud computing?**\nA) Decreasing the size of databases\nB) The ability to increase or decrease IT resources as needed\nC) The process of moving to a smaller server\nD) Reducing the number of cloud services\n**Answer: B) The ability to increase or decrease IT resources as needed**\n\n**5. What is a 'public cloud'?**\nA) A cloud service that is open for anyone to use\nB) A weather phenomenon\nC) A private network\nD) A type of VPN\n**Answer: A) A cloud service that is open for anyone to use**"\n\n**6. What is IaaS?**\nA) Internet as a Service\nB) Infrastructure as a Service\nC) Information as a System\nD) Integration as a Service\n**Answer: B) Infrastructure as a Service**"
-
-                    **Proceed with this format for all questions, and is answerable based on the provided content. This comprehensive approach ensures a focused, educational, and thematic quiz that effectively assesses students' understanding and engagement with the material.** 
-                """
-    Quetions=[]
-    for i in formatted_strings:
-        user_message = f"Create multiple-choice questions based on the specified learning outcomes and their associated content within triple hashtags . Content details are provided below: ###{i}###."
+        user_message = f"""Please generate multiple-choice questions from the provided content associated with specific learning outcomes. learning outcome is enclosed within triple hashtags, denoted as `###{i}###`, represents the learning outcome. The content relevant to each learning outcome is enclosed within triple backticks, ` ```{docs}``` `,  represents the content related to that learning outcome. Ensure that each multiple-choice question is directly derived from the relevant content and clearly aligns with its respective learning outcome."""
         response = client.chat.completions.create(
-            model="gpt-4-turbo-preview",
-            messages=[
-                {"role": "system", "content": system_message.strip()},
-                {"role": "user", "content": user_message.strip()}
-            ],
-            temperature=0
-        )
-        
+                model="gpt-4-turbo-preview",
+                messages=[
+                    {"role": "system", "content": system_message.strip()},
+                    {"role": "user", "content": user_message.strip()}
+                ],
+                temperature=0
+            )
+            
         summary = response.choices[0].message.content
-        Quetions.append(summary)
-    return Quetions
+        print(summary)
+        Quetion_Learning_outcomes[i]=summary
+    logging.info(Quetion_Learning_outcomes)
+    return Quetion_Learning_outcomes
         
 
 def remove_old_database_files(directory_path='./docs/chroma'):
@@ -713,21 +683,20 @@ if __name__ == "__main__":
         file_contents = get_file_contents(file_details)
         # Process and insert the file contents into the database
         vectordb = process_and_insert_contents(file_contents, persist_directory)
-        # Summarize the content of the files using the OpenAI API
+
+        #Summarize the content of the files using the OpenAI API
         summarized_contents = summarize_files(file_contents)
         chunked_contents = create_chunks_from_content_greedy(summarized_contents,context_window_size)
         list_of_learning_outcomes = generate_learning_outcomes_for_chunks(chunked_contents)
         logging.info(list_of_learning_outcomes)
         filtered_learning_outcomes = filter_learning_outcomes(list_of_learning_outcomes)
-        logging.info(filtered_learning_outcomes)
-        # graph(filtered_learning_outcomes[0],"Before Filter")
-        # graph(filtered_learning_outcomes[1],"After Filter")
+        # # graph(filtered_learning_outcomes[0],"Before Filter")
+        # # graph(filtered_learning_outcomes[1],"After Filter")
 
-        #random_5_lo = random.sample(filtered_learning_outcomes, 5)
-        #learning_outcomes_with_docs=find_most_relevant_learning_outcome_document(vectordb,random_5_lo)
-        #Quetions = format_learning_outcomes_with_identifiers(learning_outcomes_with_docs)
-        #logging.info(Quetions)
-        #  mark_down = generate_markdown_file(Quetions)
+        # learning_outcomes_with_docs=find_most_relevant_learning_outcome_document(vectordb,filtered_learning_outcomes)
+        Quetions = format_learning_outcomes_with_identifiers(vectordb,filtered_learning_outcomes,5)
+        # #logging.info(Quetions)
+        # #  mark_down = generate_markdown_file(Quetions)
         
 
     except Exception as e:

@@ -1,4 +1,3 @@
-from Prompt_examples import content1,content2,content3, content4
 import os
 import PyPDF2
 import openai
@@ -7,6 +6,7 @@ from dotenv import load_dotenv
 import logging
 import nbformat
 import jsonpatch
+from openai import OpenAI
 # class Learning_Outcomes(BaseModel):
 #     learning_outcomes : List[str] = Field(description="list of learning outcomes")
 import matplotlib.pyplot as plt
@@ -34,7 +34,7 @@ import PyPDF2
 import ast
 warnings.filterwarnings("ignore")
 # Configure basic logging
-logging.basicConfig(filename='app_COT_BT.log', level=logging.INFO, 
+logging.basicConfig(filename='app_Zeroshot.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 def analyze_directory(directory):
@@ -261,46 +261,24 @@ def extract_key_topic(outcome):
     else:
         return "General"
 
+import networkx as nx
+import matplotlib.pyplot as plt
+import random
+from matplotlib.lines import Line2D
+from community import community_louvain
+from itertools import cycle
 
-# Function to draw a graph based on given indices and title
-def draw_similarity_graph(indices, cosine_sim, title,threshold):
-    G = nx.Graph()
-
-    # Add nodes and edges based on the provided indices and similarity matrix
-    for i in indices:
-        G.add_node(i, label=f"Doc {i+1}")
-    for i in indices:
-        for j in indices:
-            if i != j and cosine_sim[i][j] > threshold:
-                G.add_edge(i, j, weight=cosine_sim[i][j])
     
-    pos = nx.spring_layout(G)  # Node positions
+import plotly.graph_objects as go
+import networkx as nx
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
-    plt.figure(figsize=(10, 8))
-    plt.grid(True)  # Enable grid
-    plt.axis('on')  # Show axis
-
-    # Nodes
-    node_colors = range(len(G))
-    nx.draw_networkx_nodes(G, pos, node_size=700, cmap=plt.cm.viridis, node_color=node_colors, alpha=0.8)
-
-    # Edges
-    edges = G.edges(data=True)
-    weights = [d['weight']*10 for u, v, d in edges]
-    nx.draw_networkx_edges(G, pos, edgelist=edges, width=weights)
-
-    # Labels
-    nx.draw_networkx_labels(G, pos, font_size=12, font_family="sans-serif")
-
-    plt.title(title, fontsize=20)
-    plt.show()
-
-
- # Define your desired data structure for learning outcomes.
-class LearningOutcomes(BaseModel):
-    outcomes: List[str] = Field(description="List of learning outcomes")
- # Set up a parser to enforce the output structure.
-parser = PydanticOutputParser(pydantic_object=LearningOutcomes)
+#  # Define your desired data structure for learning outcomes.
+# class LearningOutcomes(BaseModel):
+#     outcomes: List[str] = Field(description="List of learning outcomes")
+#  # Set up a parser to enforce the output structure.
+# parser = PydanticOutputParser(pydantic_object=LearningOutcomes)
 
 def generate_learning_outcomes_for_chunks(documents):
     api_key = os.getenv('OPENAI_API_KEY')
@@ -315,40 +293,24 @@ def generate_learning_outcomes_for_chunks(documents):
 
     
     system_message = f"""
-\"\"\"
-As a curriculum developer and professor, tasked with dissecting educational material across a broad spectrum of topics, your goal is to articulate exactly {number_of_outcomes} learning outcomes. These outcomes, derived from material within triple backticks, should span the cognitive spectrum of Bloom's Taxonomy, ensuring students acquire a comprehensive set of skills and knowledge.
+      As a Professor with expertise in curriculum development and crafting learning outcomes, 
+      your task is to extract and enumerate {number_of_outcomes} distinct learning outcomes from the 
+      provided course content. This content includes programming code, with each topic or code example 
+      distinctly separated by triple backticks ```. Your challenge is to recognize and interpret these 
+      segmented topics, especially those conveyed through programming code, to determine their thematic 
+      and practical contributions to the course. These outcomes should address the comprehensive skills 
+      and knowledge base essential to the subject matter, with a special emphasis on the interpretation 
+      and application of programming concepts as demonstrated within the code segments. 
+      The learning outcomes should be formatted as a Python list, precisely containing {number_of_outcomes} 
+      entries. Each entry must represent a unique learning outcome that students are expected to achieve by 
+      the end of the course, directly informed by the theoretical content and the 
+      practical programming code examples provided.
+    """
 
-To achieve this, follow the steps below, each step aligned with Bloom's principles:
+    all_content_learning_outcomes_dictionary = dict()
 
-1. **Content Review**: Begin with a thorough review of the provided material. Whether it's theoretical discussions, practical applications, or programming examples, grasp the depth and breadth of each topic.
+    for index, chunk in enumerate(documents):
 
-2. **Bloom's Alignment**: Map the core concepts from the material to Bloom's Taxonomy levels - remembering, understanding, applying, analyzing, evaluating, and creating. This ensures a holistic approach to learning outcome development.
-
-3. **Outcome Identification**: Based on Bloom's alignment, identify key learning outcomes for each piece of content. Use action verbs specific to Bloom's levels (e.g., 'list', 'explain', 'demonstrate', 'analyze', 'evaluate', 'create') to clearly articulate the cognitive skills and knowledge to be developed.
-
-4. **Outcome Selection and Prioritization**: From the potential outcomes, prioritize and select {number_of_outcomes} that offer a balanced representation across Bloom's levels. This selection should ensure that students not only acquire foundational knowledge but are also able to apply, analyze, synthesize, and evaluate information in complex scenarios.
-
-5. **List Organization**: Organize these {number_of_outcomes} into a Python list, with each item representing a unique learning goal derived directly from the content and aligned with a specific level of Bloom's Taxonomy.
-
-*An example structure for organizing the learning outcomes in a Python list could look like this:*
-
-    learning_outcomes = [
-        "Outcome 1: Understanding the fundamental concepts of [Topic A], demonstrating both theoretical insights and practical applications.",
-        "Outcome 2: Developing proficiency in [Skill B] through guided practice and real-world applications found in [Topic B].",
-        ...
-        "Outcome {number_of_outcomes}: Achieving a comprehensive understanding and application of [Concepts from Topic X] combined with [Skills from Topic Y]."
-    ]
-
-\"\"\"
-\"\"\"Through this structured, Bloom's Taxonomy-aligned approach, you will develop diverse and comprehensive learning outcomes, ensuring students achieve both conceptual understanding and practical proficiency.\"\"\"
-"""
-    all_out_comes=[]
-    logging.info("Chain_Of_thought_FS_BT")
-    d=dict()
-    # Generate learning outcomes for each chunk
-    for index, chunk in enumerate(documents, start=1):
-        logging.info(chunk)
-        delimiter = "```"
         user_message = f"""
                         \"\"\"
                         As a curriculum developer and professor, I am tasked with creating learning outcomes based on the provided educational material. Below is a segment of educational content enclosed within triple backticks, which spans a wide range of topics potentially including theoretical discussions, practical applications, programming examples, and other forms of academic content. My goal is to distill this material into specific, actionable learning outcomes that reflect the essential skills and knowledge students are expected to master. 
@@ -374,43 +336,12 @@ To achieve this, follow the steps below, each step aligned with Bloom's principl
         start = summary.find("[")
         end = summary.rfind("]") + 1
         outcome_list = eval(summary[start:end])
-        logging.info(outcome_list)
-        d[index]=outcome_list
-        all_out_comes.append(outcome_list)
+        for i in outcome_list:
+            all_content_learning_outcomes_dictionary[i]=chunk
 
-    logging.info(d)
-    return
-    # Flatten each list of outcomes into a single string per list to simplify the example
-    documents = [item for outcome_list in all_out_comes for item in outcome_list]
 
-    # Vectorize the documents
-    vectorizer = TfidfVectorizer(stop_words='english')
-    tfidf_matrix = vectorizer.fit_transform(documents)
-
-    # Compute cosine similarity between documents
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-
-    # Determine similarity threshold
-    threshold = 0.2  # Example threshold, adjust based on your needs
-
-    # Filter documents based on similarity (naive approach)
-    filtered_indices = []
-    for i in range(len(cosine_sim)):
-        if not any(cosine_sim[i][j] > threshold and j != i for j in filtered_indices):
-            filtered_indices.append(i)
-
-    # Extract the filtered documents based on filtered_indices
-    filtered_documents = [documents[i] for i in filtered_indices]
-
-    logging.info(f"Original number of documents: {len(documents)}")
-    logging.info(f"Filtered number of documents: {len(filtered_documents)}")
-
-    all_indices = range(len(cosine_sim))
-    draw_similarity_graph(all_indices, cosine_sim, "Before Filtering Similarity Graph",threshold)
-
-    draw_similarity_graph(filtered_indices, cosine_sim, "After Filtering Similarity Graph",threshold)
-
-    return filtered_documents
+    # Load a pre-trained model
+    return all_content_learning_outcomes_dictionary
 
 def find_most_relevant_learning_outcome_document(vectordb, learning_outcomes):
     """
@@ -795,6 +726,149 @@ def generate_markdown_file(Quetions):
         file.write(summary)
 
 
+
+def filter_learning_outcomes(documents):
+    # Load a pre-trained model
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    # Extract the keys from the dictionary (learning outcomes)
+    outcomes = list(documents.keys())
+    
+    # Generate embeddings for the learning outcomes (keys)
+    embeddings = model.encode(outcomes)
+
+    # Compute cosine similarity
+    cos_sim_matrix = cosine_similarity(embeddings)
+
+    # Grouping thresholds
+    threshold = 0.8  # Similarity threshold for grouping
+
+    # Initialize tracking for grouped indices
+    grouped_indices = set()
+
+    # Finding and grouping similar learning outcomes
+    for i in range(len(outcomes)):
+        if i not in grouped_indices:  # Check if i is not already grouped
+            for j in range(i + 1, len(outcomes)):
+                if cos_sim_matrix[i][j] > threshold:
+                    if j not in grouped_indices:  # Check if j is not already grouped
+                        grouped_indices.add(j)
+
+    # Create a dictionary of unique learning outcomes with their contents
+    unique_learning_outcomes = {outcomes[i]: documents[outcomes[i]] for i in range(len(outcomes)) if i not in grouped_indices}
+
+    return unique_learning_outcomes
+
+import networkx as nx
+import plotly.graph_objects as go
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+
+def graph(learning_outcomes, graphtitle="Visualizing Learning Outcome Similarities"):
+    # Load the model and generate embeddings
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+    embeddings = model.encode(learning_outcomes)
+
+    # Compute cosine similarity
+    cos_sim_matrix = cosine_similarity(embeddings)
+
+    # Create a graph
+    G = nx.Graph()
+
+    # Add nodes with labels
+    for idx, outcome in enumerate(learning_outcomes):
+        G.add_node(idx, label=outcome)
+
+    # Add edges based on cosine similarity
+    threshold = 0.8
+    for i in range(len(cos_sim_matrix)):
+        for j in range(i + 1, len(cos_sim_matrix)):
+            if cos_sim_matrix[i][j] > threshold:
+                G.add_edge(i, j, weight=cos_sim_matrix[i][j])
+
+    # Position nodes using the spring layout
+    pos = nx.spring_layout(G)
+
+    # Find connected components and assign a color to each component
+    components = list(nx.connected_components(G))
+    component_color = {node: idx for idx, component in enumerate(components) for node in component}
+
+    # Edge traces
+    edge_trace = go.Scatter(
+        x=[],
+        y=[],
+        line=dict(width=0.5, color='#aaa'),  # Lighter line color for visibility on dark background
+        hoverinfo='none',
+        mode='lines')
+
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_trace['x'] += tuple([x0, x1, None])
+        edge_trace['y'] += tuple([y0, y1, None])
+
+    # Node traces
+    node_trace = go.Scatter(
+        x=[],
+        y=[],
+        text=[],
+        mode='markers',
+        hoverinfo='text',
+        marker=dict(
+            showscale=True,
+            colorscale='YlGnBu',
+            size=[],
+            color=[],
+            colorbar=dict(
+                thickness=15,
+                title='Node Components',
+                xanchor='left',
+                titleside='right',
+                titlefont=dict(color='white', size=14),  # Correctly setting the font size and color
+                tickfont=dict(color='white')
+            ),
+            line=dict(width=2, color='white')))
+
+    # Node size calculation enhancement
+    min_size = 10  # Minimum size for a node
+    scale_factor = 5  # Scaling factor for nodes based on degree
+
+    for node in G.nodes():
+        x, y = pos[node]
+        node_trace['x'] += tuple([x])
+        node_trace['y'] += tuple([y])
+        node_trace['text'] += tuple([G.nodes[node]['label']])
+        node_trace['marker']['color'] += tuple([component_color[node]])
+        node_degree = len(G.edges(node))
+        node_size = min_size + node_degree * scale_factor
+        node_trace['marker']['size'] += tuple([node_size])
+
+    # Create figure with dark theme
+    fig = go.Figure(data=[edge_trace, node_trace],
+                    layout=go.Layout(
+                        title=graphtitle,
+                        titlefont=dict(color='white'),
+                        showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=0, l=0, r=0, t=40),
+                        paper_bgcolor='rgba(10,10,10,1)',  # Dark background color
+                        plot_bgcolor='rgba(10,10,10,1)',  # Same as paper to maintain consistency
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)))
+
+    fig.show()
+# Function to randomly pick 5 elements from a dictionary
+def pick_random_keys(dictionary, num_elements=5):
+    # Ensure there are enough keys to sample
+    if len(dictionary) < num_elements:
+        return "The dictionary does not have enough elements."
+
+    # Select random keys
+    random_keys = random.sample(list(dictionary.keys()), num_elements)
+
+    # Create a new dictionary from the selected keys
+    new_dict = {key: dictionary[key] for key in random_keys}
+    return new_dict
 # Main execution
 if __name__ == "__main__":
     remove_old_database_files()
@@ -820,11 +894,17 @@ if __name__ == "__main__":
         # Summarize the content of the files using the OpenAI API
         summarized_contents = summarize_files(file_contents)
         chunked_contents = create_chunks_from_content_greedy(summarized_contents,context_window_size)
-        learning_outcomes_by_chunk = generate_learning_outcomes_for_chunks(chunked_contents)
-        print(learning_outcomes_by_chunk)
-        # learning_outcomes=find_most_relevant_learning_outcome_document(vectordb,learning_outcomes_by_chunk)
-        # Quetions = format_learning_outcomes_with_identifiers(learning_outcomes)
-        # mark_down = generate_markdown_file(Quetions)
+        dict_of_learning_outcomes_content = generate_learning_outcomes_for_chunks(chunked_contents)
+        filtered_dict_of_learning_outcomes_content = filter_learning_outcomes(dict_of_learning_outcomes_content)
+        graph(list(dict_of_learning_outcomes_content.keys()),f"Before Filter Total Learning Outcomes {len(list(dict_of_learning_outcomes_content.keys()))}")
+        graph(list(filtered_dict_of_learning_outcomes_content.keys()),f"After Filter Total Learning Outcomes  {len(list(filtered_dict_of_learning_outcomes_content.keys()))}")
+
+        random_5_lo = pick_random_keys(filtered_dict_of_learning_outcomes_content, 5)
+        logging.info(random_5_lo)
+        # learning_outcomes_with_docs=find_most_relevant_learning_outcome_document(vectordb,random_5_lo)
+        # Quetions = format_learning_outcomes_with_identifiers(learning_outcomes_with_docs)
+        # logging.info(Quetions)
+        #  mark_down = generate_markdown_file(Quetions)
         
 
     except Exception as e:

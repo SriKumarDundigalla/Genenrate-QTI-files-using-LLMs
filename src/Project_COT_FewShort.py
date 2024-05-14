@@ -34,7 +34,7 @@ import PyPDF2
 import ast
 warnings.filterwarnings("ignore")
 # Configure basic logging
-logging.basicConfig(filename='app_COT_BT.log', level=logging.INFO, 
+logging.basicConfig(filename='app_COT_FewShot.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 def analyze_directory(directory):
@@ -44,7 +44,7 @@ def analyze_directory(directory):
     :param directory: The path of the directory to analyze.
     :return: A list of dictionaries, each containing 'name', 'type', 'size', and 'path' of the file.
     """
-    logging.info(f"Analyzing directory: {directory}")
+    # logging.info(f"Analyzing directory: {directory}")
     supported_extensions = {'.md', '.ipynb','.pdf'} #'.py'
     file_details = []
 
@@ -61,7 +61,7 @@ def analyze_directory(directory):
                     'path': file_path
                 }
                 file_details.append(file_info)
-                logging.info(f"File added for processing: {file_path}")
+                # logging.info(f"File added for processing: {file_path}")
 
     return file_details
 
@@ -111,8 +111,9 @@ def read_file_content(file_info):
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = clean_content(f.read())
 
-        logging.info(f"Successfully read and cleaned content from: {file_path}")
+        # logging.info(f"Successfully read and cleaned content from: {file_path}")
     except Exception as e:
+        
         logging.exception(f"Error reading {file_path}: {e}")
 
     return content
@@ -162,7 +163,7 @@ def process_and_insert_contents(file_contents, persist_directory):
         )
         
         # Logging or any other operation after insertion
-        logging.info(f"Processed and inserted content from: {content_detail['path']}")
+        # logging.info(f"Processed and inserted content from: {content_detail['path']}")
     return vectordb
 def summarize_files(file_details):
     """
@@ -261,7 +262,6 @@ def extract_key_topic(outcome):
     else:
         return "General"
 
-
 # Function to draw a graph based on given indices and title
 def draw_similarity_graph(indices, cosine_sim, title,threshold):
     G = nx.Graph()
@@ -316,38 +316,68 @@ def generate_learning_outcomes_for_chunks(documents):
     
     system_message = f"""
 \"\"\"
-As a curriculum developer and professor, tasked with dissecting educational material across a broad spectrum of topics, your goal is to articulate exactly {number_of_outcomes} learning outcomes. These outcomes, derived from material within triple backticks, should span the cognitive spectrum of Bloom's Taxonomy, ensuring students acquire a comprehensive set of skills and knowledge.
+As a curriculum developer and professor, you are tasked with a specific challenge. The educational material, spanning a broad range of topics, is provided to you encapsulated within triple backticks. This material might include theoretical discussions, practical applications, programming examples, and more. Your primary objective is to extract and articulate exactly {number_of_outcomes} learning outcomes from the content provided. These outcomes should be comprehensive, reflecting the skills and knowledge students are expected to master by the end of the course. It's crucial to balance theoretical insights with practical competencies demonstrated through the material.
 
-To achieve this, follow the steps below, each step aligned with Bloom's principles:
+Given this role and task, let's breakdown the approach step-by-step to ensure clarity and precision in the outcomes extracted:
 
-1. **Content Review**: Begin with a thorough review of the provided material. Whether it's theoretical discussions, practical applications, or programming examples, grasp the depth and breadth of each topic.
+1. **Content Review**: Start by meticulously reviewing each piece of educational material provided within triple backticks. Whether it's a piece of code or a theoretical discussion, understanding each element in-depth is key.
 
-2. **Bloom's Alignment**: Map the core concepts from the material to Bloom's Taxonomy levels - remembering, understanding, applying, analyzing, evaluating, and creating. This ensures a holistic approach to learning outcome development.
+2. **Outcome Identification**: From each piece of content, identify the key learning outcomes. These should be the most critical skills or knowledge that a student needs to acquire. The focus should be on outcomes that are directly related to the material reviewed, ensuring relevance and direct derivation from the content.
 
-3. **Outcome Identification**: Based on Bloom's alignment, identify key learning outcomes for each piece of content. Use action verbs specific to Bloom's levels (e.g., 'list', 'explain', 'demonstrate', 'analyze', 'evaluate', 'create') to clearly articulate the cognitive skills and knowledge to be developed.
+3. **Outcome Selection and Prioritization**: Out of the potential outcomes identified, prioritize and select the {number_of_outcomes} most important ones. These selected outcomes should span the spectrum of the material, ensuring a diverse and comprehensive reflection of the course content.
 
-4. **Outcome Selection and Prioritization**: From the potential outcomes, prioritize and select {number_of_outcomes} that offer a balanced representation across Bloom's levels. This selection should ensure that students not only acquire foundational knowledge but are also able to apply, analyze, synthesize, and evaluate information in complex scenarios.
+4. **List Organization**: Organize these {number_of_outcomes} outcomes into a Python list. Each item in this list should be a distinct learning goal, articulately representing a blend of conceptual understanding and applicable skills derived directly from the course content.
 
-5. **List Organization**: Organize these {number_of_outcomes} into a Python list, with each item representing a unique learning goal derived directly from the content and aligned with a specific level of Bloom's Taxonomy.
+5. **Adherence to Content**: Throughout this process, it's vital to confine your analysis to the material provided within the triple backticks. Extrapolation beyond the provided content should be avoided to maintain accuracy and relevance.
 
-*An example structure for organizing the learning outcomes in a Python list could look like this:*
+Few example structure for organizing the learning outcomes in a Python list could look like below. Output response strictly should be python list.Do not venture beyond the content provided. Stick only to the content provided to you. Proceed to analyze the given content and structure your response in the as python list as follows example output response structure:
+            Example_input1: Generate Lerning outcomes for the following content enclosed by triple hashtag{delimiter}{content1}{delimiter}
+            Expected_output1 :  [
+                "Understand and Apply Various Data Mining Techniques: Learners will be able to describe and apply different data mining techniques such as association rules, classification, clustering, decision trees, K-Nearest Neighbor (KNN), neural networks, and predictive analysis. They will understand how these techniques are used to extract valuable insights from large datasets, including market basket analysis, object classification, grouping based on similarities, and forecasting future outcomes.",
+               "Comprehend the Data Mining Process: Learners will gain an understanding of the structured process involved in data mining, including the importance of understanding the business context, data preparation, model building, result evaluation, and implementing changes based on findings. This outcome ensures that learners can navigate through the complexities of data analysis projects systematically and efficiently.",
+               "Execute Predictive Modeling using Linear Regression: Learners will develop the skills to implement predictive models using linear regression, including data preparation, model fitting, and performance analysis. They will be proficient in using Python libraries such as matplotlib, numpy, pandas, and sklearn for data manipulation and visualization, fitting a linear regression model, and evaluating its performance through metrics like the coefficient of determination (R^2).",
+                "Data Preparation and Visualization: Learners will be skilled in preparing data for analysis, including cleaning, standardizing, and checking for outliers. They will also learn how to visualize data and regression model outcomes using scatter plots to identify trends and patterns. This outcome emphasizes the importance of visual data exploration as a preliminary step to modeling.",
+                "Critical Evaluation and Application of Data Mining Findings: Upon completing their learning, individuals will be capable of critically evaluating the results of data mining and predictive modeling efforts. They will understand how to make informed decisions based on the analysis, implement changes in the business strategy, and monitor the impact of these changes. This learning outcome bridges the gap between technical analysis and practical business applications, preparing learners to contribute strategically to business growth and innovation."
+                ]
 
-    learning_outcomes = [
-        "Outcome 1: Understanding the fundamental concepts of [Topic A], demonstrating both theoretical insights and practical applications.",
-        "Outcome 2: Developing proficiency in [Skill B] through guided practice and real-world applications found in [Topic B].",
-        ...
-        "Outcome {number_of_outcomes}: Achieving a comprehensive understanding and application of [Concepts from Topic X] combined with [Skills from Topic Y]."
-    ]
+            Example_input2 : Generate Lerning outcomes for the following content enclosed by triple hashtag{delimiter}{content2}{delimiter}
+            Expected_output2 : [
+                    "Understand Database Fundamentals and MongoDB's Place in the Ecosystem: Learners will grasp the concept of databases, differentiating between relational (SQL) and non-relational (NoSQL) databases. They will understand MongoDB's role as a powerful, flexible NoSQL document database that supports diverse data storage needs with scalability, performance, and high availability.",
+                    "Develop Skills in Performing CRUD Operations with MongoDB using Python: Participants will acquire the ability to connect to a MongoDB database using Python's `pymongo` library, create databases and collections, and perform CRUD (Create, Read, Update, Delete) operations to manage documents within MongoDB collections.",
+                    "Master Advanced MongoDB Operations and Database Management: Learners will delve into advanced MongoDB functionalities such as aggregation, indexing, and query optimization. They will learn how to use these operations to enhance query performance and ensure efficient data retrieval, forming a solid foundation for developing data-driven applications.",
+                    "Implement Security and Efficient Data Handling Techniques: Students will learn secure methods of handling sensitive information by reading authentication details from external files, thus enhancing security and simplifying credential management. They will also understand the importance of indexing and the capabilities of MongoDB in supporting large-scale, efficient data management and retrieval.",
+                    "Acquire Comprehensive Knowledge on MongoDB's Features, Advantages, and Usage in Industry: Learners will explore the features, advantages, and practical applications of MongoDB, understanding its schema-less nature, document orientation, high performance, scalability, and support for various data types. They will also recognize MongoDB's significance in the tech industry, supported by examples of major companies utilizing MongoDB for their data storage needs."
+                ]
 
+            Example_input3 : Generate Lerning outcomes for the following content enclosed by triple hashtag{delimiter}{content3}{delimiter}
+            Expected_output3 :
+                            [
+                    "Understand the Process of Setting Up a Connection to DataStax Astra with Cassandra: Learners will understand how to use Python to establish a secure connection to a Cassandra database hosted on DataStax Astra, including the steps for loading authentication details from a JSON file and utilizing a secure connection bundle.",
+                    "Gain Knowledge on Cassandra Database Schema Creation: Learners will gain the ability to create and manipulate database schemas within Cassandra, specifically learning how to set keyspaces and create tables with various data types as primary keys, which is crucial for database design and management.",
+                    "Learn to Insert and Query Data in Cassandra: Learners will acquire skills in inserting sample data into tables and querying data from those tables using the Cassandra Query Language (CQL), emphasizing the importance of understanding how to manage and retrieve data efficiently.",
+                    "Develop an Understanding of Parameterized Queries for Security and Efficiency: Learners will understand the significance of using parameterized queries to prevent SQL injection attacks and ensure data type accuracy, which promotes writing secure and maintainable code.",
+                    "Master the Initial Setup for Using Cassandra with DataStax Astra: Learners will be able to navigate the initial setup process for using Cassandra in a cloud environment, including creating an account on DataStax Astra, setting up a serverless database, and understanding the tools and environments (like Anaconda and VS Code) needed to connect to and work with Cassandra databases."
+                ]
+                
+            Example_input4 :Generate Lerning outcomes for the following content enclosed by triple hashtag{delimiter}{content4}{delimiter}
+            Expected_output4 :
+                            [
+                    "Understanding the Fundamentals of AI and its Branches: Learners will grasp the basic concepts and distinctions between Artificial Intelligence (AI), Machine Learning (ML), Deep Learning, and Generative AI, and how these technologies are interconnected.",
+                    "Recognizing AI's Impact Across Various Fields: Participants will identify potential areas where AI is expected to exceed human performance in the near future, such as language translation, creative writing, driving, and even complex tasks like surgery, demonstrating AI's growing influence in diverse sectors.",
+                    "Exploring the Role of Adversarial AI in Cybersecurity: Students will gain insights into how adversarial AI operates by creating inputs designed to fool AI systems, understanding its significance in cybersecurity through examples like manipulating images to bypass classifiers, and discussing its implications for malware detection and network security.",
+                    "Developing Machine Learning Models with Practical Exercises: Through hands-on exercises, learners will experience the process of training a machine learning model, including data preprocessing, feature extraction, model training with perceptrons, and evaluating accuracy, using Python libraries such as NumPy, pandas, and PyTorch.",
+                    "Ethical Considerations and Future Directions of AI: Participants will discuss the ethical aspects of AI, including the challenges of AI brittleness, opacity, and the lack of commonsense reasoning, as well as future advancements like text-to-image generation, text-to-voice conversion, and the potential for AI in generating real-world objects through 3-D printing."
+                ]
 \"\"\"
-\"\"\"Through this structured, Bloom's Taxonomy-aligned approach, you will develop diverse and comprehensive learning outcomes, ensuring students achieve both conceptual understanding and practical proficiency.\"\"\"
+\"\"\"This structured approach ensures that as a curriculum developer and professor, you systematically dissect and translate the educational material into tangible learning outcomes, aligning with the course's objectives.\"\"\"
 """
     all_out_comes=[]
-    logging.info("Chain_Of_thought_FS_BT")
     d=dict()
+    chunk_content=[]
+    # logging.info("Chain_Of_Thought")
     # Generate learning outcomes for each chunk
     for index, chunk in enumerate(documents, start=1):
-        logging.info(chunk)
+        chunk_content.append('"""'+chunk.replace('"""', ' ')+'"""')
         delimiter = "```"
         user_message = f"""
                         \"\"\"
@@ -373,11 +403,10 @@ To achieve this, follow the steps below, each step aligned with Bloom's principl
         summary = response.choices[0].message.content
         start = summary.find("[")
         end = summary.rfind("]") + 1
-        outcome_list = eval(summary[start:end])
-        logging.info(outcome_list)
+        outcome_list = ast.literal_eval(summary[start:end])
         d[index]=outcome_list
-        all_out_comes.append(outcome_list)
 
+        all_out_comes.append(outcome_list)
     logging.info(d)
     return
     # Flatten each list of outcomes into a single string per list to simplify the example
@@ -402,8 +431,8 @@ To achieve this, follow the steps below, each step aligned with Bloom's principl
     # Extract the filtered documents based on filtered_indices
     filtered_documents = [documents[i] for i in filtered_indices]
 
-    logging.info(f"Original number of documents: {len(documents)}")
-    logging.info(f"Filtered number of documents: {len(filtered_documents)}")
+    # logging.info(f"Original number of documents: {len(documents)}")
+    # logging.info(f"Filtered number of documents: {len(filtered_documents)}")
 
     all_indices = range(len(cosine_sim))
     draw_similarity_graph(all_indices, cosine_sim, "Before Filtering Similarity Graph",threshold)
