@@ -1,0 +1,53 @@
+from openai import OpenAI
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+import os
+from dotenv import load_dotenv
+load_dotenv()
+# Sample documents
+# Sample documents
+documents = [
+    "Learning outcomes of the new curriculum",
+    "Understanding deep learning",
+    "Introduction to machine learning",
+    "Advanced topics in deep learning",
+    "The future of education with AI"
+]
+
+# Set your OpenAI API key here
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def get_embedding(texts, model="text-embedding-3-small"):
+    try:
+        # Adjust the request for the OpenAI API format
+        response = client.embeddings.create(
+            input=texts,  # No need to replace "\n" here; assuming no newlines in short texts
+            model=model
+        )
+        # Extract embeddings correctly from the response
+        embeddings = [item.embedding for item in response.data]
+        return embeddings
+    except Exception as e:
+        print(f"Error obtaining embeddings: {e}")
+        return []
+
+# Get embeddings for the documents
+document_embeddings = get_embedding(documents)
+
+# Before converting to a numpy array, check if we received empty embeddings
+if document_embeddings:
+    # Convert the list of embeddings into a numpy array
+    embeddings_matrix = np.vstack(document_embeddings)
+
+    # Compute cosine similarity between document embeddings
+    cosine_sim = cosine_similarity(embeddings_matrix, embeddings_matrix)
+
+    # Print the cosine similarity matrix
+    print(cosine_sim)
+else:
+    print("No embeddings were obtained, cannot compute cosine similarity.")
+
+cosine_sim = cosine_similarity(embeddings_matrix, embeddings_matrix)
+
+# Print the cosine similarity matrix
+print(cosine_sim)
